@@ -846,19 +846,18 @@ gc.addEventListener('touchstart',e=>{
 },{passive:true});
 gc.addEventListener('touchend',e=>{
   if(state!=='playing'||e.target.closest('#dp')||e.target.closest('#pw-modal'))return;
+  e.preventDefault(); // click 이벤트 중복 방지
   const dy=e.changedTouches[0].clientY-touchY0;
   const rx=(e.changedTouches[0].clientX-gc.getBoundingClientRect().left)/W;
-  // 위로 스와이프: 점프
   if(dy<-30){doJump();return;}
-  // 탭 위치로 좌/중/우 판정 — 스와이프 구분 없이 탭 위치 기준
-  if(rx<0.33)moveLane(-1);
-  else if(rx>0.67)moveLane(1);
+  if(rx<0.28)moveLane(-1);
+  else if(rx>0.72)moveLane(1);
   else doJump();
-},{passive:true});
+},{passive:false});
 gc.addEventListener('click',e=>{
   if(state!=='playing'||e.target.closest('#dp')||e.target.closest('#pw-modal'))return;
   const rx=(e.clientX-gc.getBoundingClientRect().left)/W;
-  if(rx<0.33)moveLane(-1);else if(rx>0.67)moveLane(1);else doJump();
+  if(rx<0.28)moveLane(-1);else if(rx>0.72)moveLane(1);else doJump();
 });
 document.addEventListener('keydown',e=>{
   if(e.key==='ArrowLeft')moveLane(-1);
