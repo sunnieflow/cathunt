@@ -60,6 +60,47 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
 input[type=range].dp-slider{flex:2;accent-color:#7f77dd}
 #score-input{background:rgba(127,119,221,0.1);border:1px solid rgba(127,119,221,0.3);border-radius:8px;color:#fff;font-size:13px;padding:5px 10px;width:100%;text-align:center;margin-top:4px}
 </style>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAIX72G7ZdATJSUP-hCoBjkJ-dgKU2AgVA",
+  authDomain: "cathunt-2612c.firebaseapp.com",
+  projectId: "cathunt-2612c",
+  storageBucket: "cathunt-2612c.firebasestorage.app",
+  messagingSenderId: "276790375608",
+  appId: "1:276790375608:web:dcc19c01bdccb123b0304d"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+window.saveScore = async function(nickname, score) {
+  try {
+    await addDoc(collection(db, "scores"), {
+      nickname: nickname,
+      score: score,
+      date: new Date()
+    });
+    return true;
+  } catch(e) {
+    console.error(e);
+    return false;
+  }
+};
+
+window.getTopScores = async function() {
+  try {
+    const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(10));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => d.data());
+  } catch(e) {
+    console.error(e);
+    return [];
+  }
+};
+</script>
 </head>
 <body>
 <div id="gc">
@@ -839,22 +880,24 @@ function doJump(){
   }
 }
 
-let touchX0=0,touchY0=0;
+let touchX0=0,touchY0=0,lastTouchTime=0;
 gc.addEventListener('touchstart',e=>{
   if(e.target.closest('#dp')||e.target.closest('#pw-modal'))return;
   touchX0=e.touches[0].clientX;touchY0=e.touches[0].clientY;
 },{passive:true});
 gc.addEventListener('touchend',e=>{
   if(state!=='playing'||e.target.closest('#dp')||e.target.closest('#pw-modal'))return;
-  e.preventDefault(); // click 이벤트 중복 방지
+  lastTouchTime=Date.now();
   const dy=e.changedTouches[0].clientY-touchY0;
   const rx=(e.changedTouches[0].clientX-gc.getBoundingClientRect().left)/W;
   if(dy<-30){doJump();return;}
   if(rx<0.28)moveLane(-1);
   else if(rx>0.72)moveLane(1);
   else doJump();
-},{passive:false});
+},{passive:true});
 gc.addEventListener('click',e=>{
+  // 터치 직후 300ms 내 click은 무시 (중복 방지)
+  if(Date.now()-lastTouchTime<300)return;
   if(state!=='playing'||e.target.closest('#dp')||e.target.closest('#pw-modal'))return;
   const rx=(e.clientX-gc.getBoundingClientRect().left)/W;
   if(rx<0.28)moveLane(-1);else if(rx>0.72)moveLane(1);else doJump();
@@ -873,6 +916,9 @@ function endGame(){
   const rcol=lives<=0?'#ff6666':'#88ffcc';
   const dirStyle=dirUnlocked?'opacity:1;color:#fac775;border-color:rgba(250,199,117,0.4);background:rgba(250,199,117,0.08)':'opacity:0.5;color:#5a4a7a;border-color:rgba(127,119,221,0.15);background:rgba(127,119,221,0.08)';
   const dirOnclick=dirUnlocked?'toggleDP()':'openPW()';
+  const finalScore=Math.floor(score);
+  const nickPlaceholder=lang==='kr'?'닉네임 입력':'Enter nickname';
+  const submitLabel=lang==='kr'?'랭킹 등록':'Submit Score';
   ov.innerHTML=
     '<div class="ov-title">CAT HUNT</div>'+
     '<div style="font-size:clamp(13px,4vw,18px);color:#cc88ff;font-weight:700;letter-spacing:3px;margin-bottom:4px">냥이사냥</div>'+
@@ -885,14 +931,67 @@ function endGame(){
       '<button class="lang-btn '+(lang==='kr'?'selected':'unselected')+'" onclick="setLang(\'kr\')">한국어</button>'+
       '<button class="lang-btn '+(lang==='en'?'selected':'unselected')+'" onclick="setLang(\'en\')">English</button>'+
     '</div>'+
-    '<button class="gbtn gbtn-main" onclick="startGame()">'+T('retry')+'</button>'+
+    '<input id="nick-input" type="text" maxlength="10" placeholder="'+nickPlaceholder+'" style="background:rgba(127,119,221,0.15);border:1px solid rgba(127,119,221,0.4);border-radius:12px;color:#fff;font-size:clamp(13px,3.5vw,16px);padding:10px 16px;text-align:center;width:200px;outline:none;margin-top:2px;">'+
+    '<button class="gbtn gbtn-main" id="submitBtn" onclick="window.submitScore()" style="margin-top:6px;padding:10px 28px;font-size:clamp(12px,3.5vw,15px">'+submitLabel+'</button>'+
+    '<div id="rank-list" style="width:100%;max-width:280px;margin-top:6px;min-height:30px;text-align:center"></div>'+
+    '<div class="lang-row" style="margin-top:4px">'+
+      '<button class="lang-btn '+(lang==='kr'?'selected':'unselected')+'" onclick="setLang(\'kr\')">한국어</button>'+
+      '<button class="lang-btn '+(lang==='en'?'selected':'unselected')+'" onclick="setLang(\'en\')">English</button>'+
+    '</div>'+
+    '<button class="gbtn gbtn-main" onclick="startGame()" style="margin-top:4px">'+T('retry')+'</button>'+
     '<button class="gbtn gbtn-dir" id="dirBtn" onclick="'+dirOnclick+'" style="'+dirStyle+'">'+T('dirBtn')+'</button>';
   ov.style.display='flex';
+
+  function renderRanking(scores){
+    const el=document.getElementById('rank-list');if(!el)return;
+    if(!scores||scores.length===0){el.innerHTML='<div style="color:#5a4a7a;font-size:11px">'+(lang==='kr'?'아직 기록 없음':'No records yet')+'</div>';return;}
+    el.innerHTML='<div style="color:#fac775;font-size:11px;font-weight:700;margin-bottom:4px">🏆 TOP 10</div>'+
+      scores.map((s,i)=>'<div style="display:flex;justify-content:space-between;padding:2px 10px;font-size:clamp(10px,2.5vw,12px);color:'+(i===0?'#ffd060':i===1?'#cccccc':i===2?'#cd7f32':'#9882cc')+'">'+
+        '<span>'+(i+1)+'. '+s.nickname+'</span><span>'+Math.floor(s.score).toLocaleString()+'</span></div>').join('');
+  }
+  if(window.getTopScores)window.getTopScores().then(renderRanking);
+
+  window.submitScore=async function(){
+    const nickEl=document.getElementById('nick-input');
+    const btn=document.getElementById('submitBtn');
+    if(!nickEl||!btn)return;
+    const nick=nickEl.value.trim();
+    if(!nick){nickEl.style.borderColor='#ff4444';return;}
+    btn.textContent=lang==='kr'?'저장 중...':'Saving...';btn.disabled=true;
+    if(window.saveScore)await window.saveScore(nick,finalScore);
+    btn.textContent=lang==='kr'?'등록 완료 ✓':'Saved ✓';btn.style.background='#44aa66';
+    if(window.getTopScores)window.getTopScores().then(renderRanking);
+  };
 }
 
 document.getElementById('startBtn').onclick=startGame;
 new ResizeObserver(resize).observe(gc);
 resize();applyStrings();
+</script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+const firebaseConfig = {
+  apiKey: "AIzaSyAIX72G7ZdATJSUP-hCoBjkJ-dgKU2AgVA",
+  authDomain: "cathunt-2612c.firebaseapp.com",
+  projectId: "cathunt-2612c",
+  storageBucket: "cathunt-2612c.firebasestorage.app",
+  messagingSenderId: "276790375608",
+  appId: "1:276790375608:web:dcc19c01bdccb123b0304d"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+window.saveScore = async function(nickname, score) {
+  try { await addDoc(collection(db, "scores"), {nickname, score, date: new Date()}); return true; }
+  catch(e) { console.error(e); return false; }
+};
+window.getTopScores = async function() {
+  try {
+    const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(10));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => d.data());
+  } catch(e) { console.error(e); return []; }
+};
 </script>
 </body>
 </html>
