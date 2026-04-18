@@ -122,9 +122,7 @@ let phase=0;
 let rareBanner=0;
 let bgRed=0;
 let comboFlash=0,comboFlashMult=0,rareFlash=0;
-let dodgeCount=0;
-let nearMiss=0,nearMissTimer=0;
-let dodgeFlash=0,dodgeFlashNum=0;
+
 
 function resize(){
   const r=gc.getBoundingClientRect();
@@ -140,7 +138,6 @@ function startGame(){
   state='playing';score=0;combo=0;comboT=0;timeLeft=0;lastTS=0;spawnAcc=0;
   lives=MAX_LIVES;hitInvince=0;deathAnim=0;
   spd=baseSpd=2.8;objs=[];parts=[];floats=[];
-  dodgeCount=0;nearMiss=0;nearMissTimer=0;dodgeFlash=0;
   pLane=1;pY=groundY;pVY=0;jumping=false;shX=0;shY=0;flashA=0;phase=0;obstacleCooldown=0;
   rareBanner=0;bgRed=0;
   cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);
@@ -275,8 +272,6 @@ function loop(ts){
   if(timeLeft>=120)bgRed=Math.min(0.18,((timeLeft-120)/60)*0.18);
   else bgRed=Math.max(0,bgRed-rawDt/2000);
   if(comboFlash>0)comboFlash-=rawDt;
-  if(nearMissTimer>0)nearMissTimer-=rawDt;
-  if(dodgeFlash>0)dodgeFlash-=rawDt;
   if(rareFlash>0)rareFlash-=rawDt;
   if(obstacleCooldown>0)obstacleCooldown-=dt;
   spawnAcc+=dt;if(spawnAcc>spawnRate()){spawnObj();spawnAcc=0;}
@@ -316,22 +311,7 @@ function loop(ts){
       const catOnGround=pY>=groundY-8;
       if(sameLane&&atCatHeight&&catOnGround&&!jumping){takeDamage(ox,o.y);objs.splice(i,1);}
       else if(o.y>groundY+LW*0.5){
-        if(sameLane){
-          dodgeCount++;
-          dodgeFlash=900;dodgeFlashNum=dodgeCount;
-          if(dodgeCount%5===0){
-            addFloat(LX[o.lane],groundY-60,'🔥 '+dodgeCount+'!','#ff8844',true);
-            sfx('combo5');
-          } else {
-            addFloat(LX[o.lane],groundY-50,dodgeCount+' dodge!','#88ffcc',false);
-          }
-          const lateralDist=Math.abs(LX[o.lane]-LX[pLane]);
-          if(lateralDist<LW*1.2&&!jumping&&pY>=groundY-8){
-            nearMiss++;nearMissTimer=800;
-            addFloat(LX[pLane],pY-60,'CLOSE! 😱','#ffdd44',true);
-            sfx('gold');
-          }
-        }
+
         objs.splice(i,1);
       }
     }
@@ -524,17 +504,7 @@ function drawHUD(){
     ctx.font=(W*0.034)+'px sans-serif';ctx.textAlign='center';ctx.fillText(t,LX[l],H*0.966);
   });
   const legendY=H*0.87;
-  if(dodgeCount>0){
-    const dc=dodgeFlash>0?'#ff8844':'rgba(136,255,204,0.6)';
-    const ds=dodgeFlash>0?'700':'500';
-    ctx.fillStyle=dc;ctx.font=ds+' '+(W*0.028)+'px sans-serif';ctx.textAlign='right';
-    ctx.fillText('🛡 '+dodgeCount,W*0.96,H*0.16);
-  }
-  if(nearMissTimer>0){
-    const na=Math.min(1,nearMissTimer/400);
-    ctx.globalAlpha=na;ctx.fillStyle='#ffdd44';ctx.font='700 '+(W*0.032)+'px sans-serif';ctx.textAlign='right';
-    ctx.fillText('CLOSE!',W*0.96,H*0.195);ctx.globalAlpha=1;
-  }
+
   [[T('mouseName')[0],'#c8c8c8',10],[T('mouseName')[1],'#ffd060',30],[T('mouseName')[2],'#cc88ff',80]].forEach(([name,col,pts],i)=>{
     ctx.fillStyle=col;ctx.font='500 '+(W*0.026)+'px sans-serif';ctx.textAlign='center';ctx.fillText(name+' +'+pts,LX[i],legendY);
   });
@@ -583,7 +553,7 @@ function endGame(){
     '<div style="font-size:clamp(11px,3vw,13px);color:'+rcol+';margin-bottom:4px">'+reason+'</div>'+
     '<div style="font-size:clamp(22px,7vw,30px);color:#fff;font-weight:700;margin:4px 0">'+finalScore.toLocaleString()+' '+T('pts')+'</div>'+
     '<div style="font-size:clamp(11px,3vw,13px);color:#88ffcc;margin-bottom:2px">'+(lang==='kr'?'생존시간: ':'Survived: ')+Math.floor(timeLeft/60)+'m '+Math.floor(timeLeft%60)+'s</div>'+
-    '<div style="font-size:clamp(11px,3vw,13px);color:#ff8844;margin-bottom:2px">🛡 '+(lang==='kr'?'회피: ':'Dodged: ')+dodgeCount+(nearMiss>0?' | 😱 CLOSE: '+nearMiss:'')+' </div>'+
+    
     '<div style="font-size:clamp(11px,3vw,13px);color:#9882cc">'+T('best')+': '+Math.floor(highScore).toLocaleString()+' '+T('pts')+'</div>'+
     '<div class="lang-row">'+
       '<button class="lang-btn '+(lang==='kr'?'selected':'unselected')+'" onclick="setLang(\'kr\')">한국어</button>'+
