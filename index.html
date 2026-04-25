@@ -110,6 +110,28 @@ window.getTopScores = async function() {
     <div class="ov-sub" id="t-control"></div>
     <div class="ov-hint" id="t-jump-hint"></div>
     <div id="hs-txt"></div>
+    <div style="display:flex;flex-direction:column;gap:3px;margin:8px 0;width:100%;max-width:240px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 10px">
+        <span style="font-size:clamp(9px,2.3vw,11px);background:#333;color:#aaaaaa;border-radius:8px;padding:2px 8px;font-weight:700;letter-spacing:1px">BABY</span>
+        <span style="font-size:clamp(9px,2.3vw,11px);color:#666">0 ~</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 10px">
+        <span style="font-size:clamp(9px,2.3vw,11px);background:rgba(68,204,102,0.3);color:#44cc66;border-radius:8px;padding:2px 8px;font-weight:700;letter-spacing:1px">PLAYER</span>
+        <span style="font-size:clamp(9px,2.3vw,11px);color:#44cc66">40,000 ~</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 10px">
+        <span style="font-size:clamp(9px,2.3vw,11px);background:rgba(68,136,255,0.3);color:#4488ff;border-radius:8px;padding:2px 8px;font-weight:700;letter-spacing:1px">PRO</span>
+        <span style="font-size:clamp(9px,2.3vw,11px);color:#4488ff">70,000 ~</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 10px">
+        <span style="font-size:clamp(9px,2.3vw,11px);background:rgba(170,68,255,0.3);color:#aa44ff;border-radius:8px;padding:2px 8px;font-weight:700;letter-spacing:1px">MASTER</span>
+        <span style="font-size:clamp(9px,2.3vw,11px);color:#aa44ff">100,000 ~</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 10px">
+        <span style="font-size:clamp(9px,2.3vw,11px);background:rgba(255,200,0,0.3);color:#ffcc00;border-radius:8px;padding:2px 8px;font-weight:700;letter-spacing:1px">CAT KING</span>
+        <span style="font-size:clamp(9px,2.3vw,11px);color:#ffcc00">150,000 ~</span>
+      </div>
+    </div>
     <div class="lang-row">
       <button class="lang-btn unselected" id="btn-kr" onclick="setLang('kr')">한국어</button>
       <button class="lang-btn selected" id="btn-en" onclick="setLang('en')">English</button>
@@ -508,7 +530,9 @@ function drawHeart(x,y,r,col){ctx.save();ctx.translate(x,y);ctx.fillStyle=col;ct
 function drawHUD(){
   ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(0,0,W,H*0.115);
   ctx.fillStyle='#fff';ctx.font='600 '+(W*0.058)+'px sans-serif';ctx.textAlign='left';ctx.fillText(Math.floor(score).toLocaleString(),W*0.04,H*0.072);
-  ctx.fillStyle='rgba(200,180,255,0.65)';ctx.font=(W*0.027)+'px sans-serif';ctx.fillText(T('best')+': '+Math.floor(highScore).toLocaleString(),W*0.04,H*0.103);
+  const hg=getGrade(Math.floor(highScore));
+  const hgname=lang==='kr'?hg.kr:hg.badge;
+  ctx.fillStyle='rgba(200,180,255,0.65)';ctx.font=(W*0.027)+'px sans-serif';ctx.fillText(T('best')+': '+Math.floor(highScore).toLocaleString()+' ['+hgname+']',W*0.04,H*0.103);
   const hr=W*0.018;
   for(let i=0;i<MAX_LIVES;i++){const hx=W*0.97-(MAX_LIVES-1-i)*hr*2.8;ctx.globalAlpha=i<lives?1:0.2;drawHeart(hx-hr,H*0.048,hr,i<lives?'#ff4466':'#555');}
   ctx.globalAlpha=1;
@@ -566,14 +590,29 @@ document.addEventListener('keydown',e=>{
 function moveLane(d){if(state==='playing')pLane=Math.max(0,Math.min(LANES-1,pLane+d));}
 function doJump(){if(state==='playing'&&!jumping){jumping=true;pVY=-(groundY-jumpPeak)*0.095;sfx('jump');}}
 
+function getGrade(s){
+  if(s>=150000)return{badge:'CAT KING',kr:'캣 킹',col:'#ffcc00',bg:'rgba(255,200,0,0.35)'};
+  if(s>=100000)return{badge:'MASTER',kr:'마스터',col:'#aa44ff',bg:'rgba(170,68,255,0.35)'};
+  if(s>=70000)return{badge:'PRO',kr:'프로',col:'#4488ff',bg:'rgba(68,136,255,0.35)'};
+  if(s>=40000)return{badge:'PLAYER',kr:'플레이어',col:'#44cc66',bg:'rgba(68,204,102,0.35)'};
+  return{badge:'BABY',kr:'베이비',col:'#aaaaaa',bg:'rgba(136,136,136,0.35)'};
+}
 function endGame(){
   sfx('gameover');
   state='idle';if(score>highScore){highScore=score;localStorage.setItem('cathunt_hs',highScore);}cancelAnimationFrame(raf);
   const reason=T('livesOut');
   const rcol='#ff6666';
   const finalScore=Math.floor(score);
+  const grade=getGrade(finalScore);
+  const highGrade=getGrade(Math.floor(highScore));
+  const isNewKing=finalScore>=150000&&Math.floor(highScore)<150000;
+  const gradeName=lang==='kr'?grade.kr:grade.badge;
   const nickPlaceholder=lang==='kr'?'닉네임 입력':'Enter nickname';
   const submitLabel=lang==='kr'?'랭킹 등록':'Submit Score';
+  if(isNewKing){
+    flashA=0.8;flashR=255;flashG=200;flashB=0;
+    for(let i=0;i<5;i++)setTimeout(()=>spawnParts(W/2,H/2,'rare'),i*200);
+  }
   ov.innerHTML=
     '<div class="ov-title">CAT HUNT</div>'+
     '<div style="font-size:clamp(9px,2.5vw,12px);color:#cc88ff;font-weight:500;letter-spacing:2px;margin-bottom:4px;opacity:0.7">냥이사냥</div>'+
@@ -581,9 +620,12 @@ function endGame(){
     '<div style="font-size:clamp(20px,6vw,28px);color:#fff;font-weight:700;margin:6px 0">'+T('gameOver')+'</div>'+
     '<div style="font-size:clamp(11px,3vw,13px);color:'+rcol+';margin-bottom:4px">'+reason+'</div>'+
     '<div style="font-size:clamp(22px,7vw,30px);color:#fff;font-weight:700;margin:4px 0">'+finalScore.toLocaleString()+' '+T('pts')+'</div>'+
+    '<div style="display:inline-block;background:'+grade.bg+';border:1px solid '+grade.col+';border-radius:20px;padding:4px 16px;margin:4px 0">'+
+      '<span style="font-size:clamp(13px,3.5vw,16px);color:'+grade.col+';font-weight:700;letter-spacing:2px">'+gradeName+'</span>'+
+    '</div>'+
+    (isNewKing?'<div style="font-size:clamp(12px,3.5vw,15px);color:#ffcc00;font-weight:700;margin:2px 0">★ CAT KING 달성! ★</div>':'')+
     '<div style="font-size:clamp(11px,3vw,13px);color:#88ffcc;margin-bottom:2px">'+(lang==='kr'?'생존시간: ':'Survived: ')+Math.floor(timeLeft/60)+'m '+Math.floor(timeLeft%60)+'s</div>'+
-    
-    '<div style="font-size:clamp(11px,3vw,13px);color:#9882cc">'+T('best')+': '+Math.floor(highScore).toLocaleString()+' '+T('pts')+'</div>'+
+    '<div style="font-size:clamp(11px,3vw,13px);color:#9882cc">'+T('best')+': '+Math.floor(highScore).toLocaleString()+' <span style="color:'+highGrade.col+'">'+(lang==='kr'?highGrade.kr:highGrade.badge)+'</span></div>'+
     '<div class="lang-row">'+
       '<button class="lang-btn '+(lang==='kr'?'selected':'unselected')+'" onclick="setLang(\'kr\')">한국어</button>'+
       '<button class="lang-btn '+(lang==='en'?'selected':'unselected')+'" onclick="setLang(\'en\')">English</button>'+
@@ -597,8 +639,18 @@ function endGame(){
     const el=document.getElementById('rank-list');if(!el)return;
     if(!scores||scores.length===0){el.innerHTML='<div style="color:#5a4a7a;font-size:11px">'+(lang==='kr'?'아직 기록 없음':'No records yet')+'</div>';return;}
     el.innerHTML='<div style="color:#fac775;font-size:11px;font-weight:700;margin-bottom:4px">🏆 TOP 10</div>'+
-      scores.map((s,i)=>'<div style="display:flex;justify-content:space-between;padding:2px 10px;font-size:clamp(10px,2.5vw,12px);color:'+(i===0?'#ffd060':i===1?'#cccccc':i===2?'#cd7f32':'#9882cc')+'">'+
-        '<span>'+(i+1)+'. '+s.nickname+'</span><span>'+Math.floor(s.score).toLocaleString()+'</span></div>').join('');
+      scores.map((s,i)=>{
+        const g=getGrade(Math.floor(s.score));
+        const gname=lang==='kr'?g.kr:g.badge;
+        const rankCol=i===0?'#ffd060':i===1?'#cccccc':i===2?'#cd7f32':'#9882cc';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 10px;font-size:clamp(10px,2.5vw,12px);">'+
+          '<span style="color:'+rankCol+'">'+(i+1)+'. '+s.nickname+'</span>'+
+          '<span style="display:flex;align-items:center;gap:6px">'+
+            '<span style="font-size:9px;color:'+g.col+';border:1px solid '+g.col+';border-radius:8px;padding:1px 5px">'+gname+'</span>'+
+            '<span style="color:'+rankCol+'">'+Math.floor(s.score).toLocaleString()+'</span>'+
+          '</span>'+
+        '</div>';
+      }).join('');
   }
   if(window.getTopScores)window.getTopScores().then(renderRanking);
   window.submitScore=async function(){
