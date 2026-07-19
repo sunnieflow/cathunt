@@ -482,14 +482,23 @@ async function confirmBuy(){
   renderBalance(); renderMap(); renderRanking(); closeModal();
 }
 async function loadLand(){
-  land = await window.loadAllLand();
+  try{
+    land = await window.loadAllLand();
+  }catch(e){ console.error('불러오기 실패', e); }
   renderMap(); renderRanking();
 }
 document.getElementById('cancelBtn').addEventListener('click', closeModal);
 document.getElementById('confirmBtn').addEventListener('click', confirmBuy);
 modalBack.addEventListener('click', (e) => { if(e.target === modalBack) closeModal(); });
 
-renderBalance(); renderSwatches(); renderMap(); loadLand();
+function init(){
+  renderBalance(); renderSwatches(); renderMap(); loadLand();
+}
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
 </script>
 </body>
 </html>
