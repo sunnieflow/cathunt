@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, getDocs, collection, increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const firebaseConfig = {
   apiKey: "AIzaSyAIX72G7ZdATJSUP-hCoBjkJ-dgKU2AgVA",
   authDomain: "cathunt-2612c.firebaseapp.com",
@@ -27,6 +27,22 @@ window.loadAllLand = async function() {
     snap.forEach(d => { out[d.id] = d.data(); });
     return out;
   } catch(e) { console.error(e); return {}; }
+};
+window.getPoints = async function(nickname, welcomeBonus) {
+  try {
+    const ref = doc(db, "points", nickname);
+    const snap = await getDoc(ref);
+    if(snap.exists()) return { balance: snap.data().balance || 0, isNew: false };
+    if(welcomeBonus){
+      await setDoc(ref, { balance: welcomeBonus });
+      return { balance: welcomeBonus, isNew: true };
+    }
+    return { balance: 0, isNew: true };
+  } catch(e) { console.error(e); return { balance: 0, isNew: false }; }
+};
+window.spendPoints = async function(nickname, amount) {
+  try { await setDoc(doc(db, "points", nickname), { balance: increment(-amount) }, { merge: true }); return true; }
+  catch(e) { console.error(e); return false; }
 };
 </script>
 <style>
@@ -104,11 +120,12 @@ window.loadAllLand = async function() {
     </div>
     <aside>
       <h2>내 정보</h2>
-      <label>소유자 이름</label>
-      <input id="ownerInput" maxlength="10" placeholder="예: 민준" value="익명">
+      <label>소유자 이름 (고양이헌트 닉네임과 동일하게)</label>
+      <input id="ownerInput" maxlength="10" placeholder="예: 민준">
+      <button id="loadPointsBtn" style="width:100%;margin-top:8px;padding:8px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--gold);font-size:12px;cursor:pointer;">내 포인트 불러오기</button>
       <label>색상</label>
       <div class="swatches" id="swatches"></div>
-      <div class="status" id="statusOut">시/군/구를 클릭하면 구매 창이 떠요.</div>
+      <div class="status" id="statusOut">이름을 입력하고 포인트를 불러온 다음, 시/군/구를 클릭하세요.</div>
       <h2 style="margin-top:18px">소유 랭킹</h2>
       <div id="ranking"><p class="empty-note">아직 아무도 땅을 사지 않았어요.</p></div>
     </aside>
@@ -125,16 +142,18 @@ window.loadAllLand = async function() {
     <p id="modalSub" style="margin:0 0 14px;color:var(--muted);font-size:12px;"></p>
     <div style="display:flex;gap:8px;margin-top:8px;">
       <button id="cancelBtn" style="flex:1;padding:9px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--text);font-size:13px;cursor:pointer;">취소</button>
-      <button id="confirmBtn" style="flex:1;padding:9px;border-radius:6px;border:1px solid #7f77dd;background:#7f77dd;color:#fff;font-weight:700;font-size:13px;cursor:pointer;">구매하기 (500P)</button>
+      <button id="confirmBtn" style="flex:1;padding:9px;border-radius:6px;border:1px solid #7f77dd;background:#7f77dd;color:#fff;font-weight:700;font-size:13px;cursor:pointer;">구매하기 (5000P)</button>
     </div>
   </div>
 </div>
 
 <script>
-const PRICE = 500, START_BALANCE = 5000;
+const PRICE = 5000;
+const WELCOME_BONUS = 2000;
 const PALETTE = ['#fac775','#dd7f77','#77ddb0','#7f9fdd','#c277dd','#dddd77'];
 let selectedColor = PALETTE[0];
-let balance = START_BALANCE;
+let balance = 0;
+let currentNickname = '';
 let land = {};
 let activeCode = null;
 
@@ -461,25 +480,74 @@ function openModal(code){
   const sub = document.getElementById('modalSub');
   const confirmBtn = document.getElementById('confirmBtn');
   if(existing){
-    sub.textContent = existing.owner + '님이 이미 소유한 곳이에요.';
+    const defScore = existing.defenseScore || 0;
+    if(existing.owner === currentNickname){
+      sub.textContent = '이미 내가 소유한 곳이에요.';
+      confirmBtn.style.display = 'none';
+    } else if(!currentNickname){
+      sub.textContent = existing.owner + '님 소유예요. 도전하려면 먼저 이름을 입력하고 포인트를 불러오세요.';
+      confirmBtn.style.display = 'none';
+    } else {
+      sub.textContent = `${existing.owner}님 소유 (방어점수 ${defScore.toLocaleString('ko-KR')}점). 고양이헌트에서 이 점수를 넘으면 뺏을 수 있어요. 실패하면 1,000P를 잃어요.`;
+      confirmBtn.style.display = 'block';
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = '⚔ 도전하러 가기';
+    }
+  } else if(!currentNickname){
+    sub.textContent = '먼저 이름을 입력하고 "내 포인트 불러오기"를 눌러주세요.';
     confirmBtn.style.display = 'none';
   } else {
-    sub.textContent = `${region.n}을(를) ${PRICE.toLocaleString('ko-KR')}P에 구매할까요? (보유: ${balance.toLocaleString('ko-KR')}P)`;
+    sub.textContent = `${region.n}을(를) ${PRICE.toLocaleString('ko-KR')}P에 구매할까요? (${currentNickname}님 보유: ${balance.toLocaleString('ko-KR')}P)`;
     confirmBtn.style.display = 'block';
     confirmBtn.disabled = balance < PRICE;
-    confirmBtn.textContent = `구매하기 (${PRICE}P)`;
+    confirmBtn.textContent = balance < PRICE ? '포인트 부족' : `구매하기 (${PRICE}P)`;
   }
   activeCode = code;
   modalBack.style.display = 'flex';
 }
 function closeModal(){ modalBack.style.display = 'none'; activeCode = null; }
+async function loadPoints(){
+  const name = document.getElementById('ownerInput').value.trim();
+  if(!name){ setStatus('이름을 먼저 입력해주세요.', 'err'); return; }
+  setStatus('포인트 불러오는 중...');
+  const result = await window.getPoints(name, WELCOME_BONUS);
+  currentNickname = name;
+  balance = result.balance;
+  renderBalance();
+  if(result.isNew){
+    setStatus(`${name}님, 환영해요! 웰컴 포인트 ${WELCOME_BONUS.toLocaleString('ko-KR')}P를 드렸어요.`, 'ok');
+  } else {
+    setStatus(`${name}님, 보유 포인트 ${result.balance.toLocaleString('ko-KR')}P를 불러왔어요.`, 'ok');
+  }
+}
+function setStatus(msg, cls){
+  statusOut.textContent = msg;
+  statusOut.className = 'status' + (cls ? ' ' + cls : '');
+}
 async function confirmBuy(){
-  if(!activeCode || balance < PRICE) return;
-  const owner = document.getElementById('ownerInput').value.trim() || '익명';
-  land[activeCode] = { owner, color: selectedColor };
+  if(!activeCode || !currentNickname) return;
+  const existing = land[activeCode];
+  const region = findRegion(activeCode);
+  if(existing){
+    const defScore = existing.defenseScore || 0;
+    const params = new URLSearchParams({
+      challenge: activeCode,
+      name: region.n,
+      target: String(defScore),
+      nick: currentNickname,
+      color: selectedColor
+    });
+    location.href = 'index.html?' + params.toString();
+    return;
+  }
+  if(balance < PRICE) return;
+  const owner = currentNickname;
+  land[activeCode] = { owner, color: selectedColor, defenseScore: 0 };
   balance -= PRICE;
   await window.saveLand(activeCode, land[activeCode]);
+  await window.spendPoints(currentNickname, PRICE);
   renderBalance(); renderMap(); renderRanking(); closeModal();
+  setStatus(`${findRegion(activeCode) ? findRegion(activeCode).n : ''} 구매 완료!`, 'ok');
 }
 async function loadLand(){
   try{
@@ -489,6 +557,7 @@ async function loadLand(){
 }
 document.getElementById('cancelBtn').addEventListener('click', closeModal);
 document.getElementById('confirmBtn').addEventListener('click', confirmBuy);
+document.getElementById('loadPointsBtn').addEventListener('click', loadPoints);
 modalBack.addEventListener('click', (e) => { if(e.target === modalBack) closeModal(); });
 
 function init(){
