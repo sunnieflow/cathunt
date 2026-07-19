@@ -3,10 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <title>한반도 땅땅땅 - CAT HUNT</title>
+<meta name="description" content="한반도 땅땅땅 - 대한민국 시/군/구 251곳을 클릭해서 소유하는 땅따먹기 게임. 고양이헌트(CAT HUNT) 점수로 포인트를 모아 땅을 사고, 다른 사람의 땅에 도전해서 뺏어보세요.">
+<meta property="og:title" content="한반도 땅땅땅">
+<meta property="og:description" content="대한민국 251개 시/군/구를 클릭해서 소유하는 땅따먹기 게임. 고양이헌트 점수로 포인트를 모아 도전해보세요.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, getDocs, collection, increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, getDocs, collection, increment, query, where, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const firebaseConfig = {
   apiKey: "AIzaSyAIX72G7ZdATJSUP-hCoBjkJ-dgKU2AgVA",
   authDomain: "cathunt-2612c.firebaseapp.com",
@@ -43,6 +46,15 @@ window.getPoints = async function(nickname, welcomeBonus) {
 window.spendPoints = async function(nickname, amount) {
   try { await setDoc(doc(db, "points", nickname), { balance: increment(-amount) }, { merge: true }); return true; }
   catch(e) { console.error(e); return false; }
+};
+window.getAndClearNotifications = async function(name) {
+  try {
+    const q = query(collection(db, "notifications"), where("to", "==", name));
+    const snap = await getDocs(q);
+    const items = [];
+    for(const d of snap.docs){ items.push(d.data()); await deleteDoc(d.ref); }
+    return items;
+  } catch(e) { console.error(e); return []; }
 };
 </script>
 <style>
@@ -514,7 +526,12 @@ async function loadPoints(){
   currentNickname = name;
   balance = result.balance;
   renderBalance();
-  if(result.isNew){
+  const notifs = await window.getAndClearNotifications(name);
+  if(notifs.length > 0){
+    const lines = notifs.map(n => `⚠ ${n.region}을(를) ${n.by}님에게 뺏겼어요.`).join('<br>');
+    statusOut.innerHTML = lines;
+    statusOut.className = 'status err';
+  } else if(result.isNew){
     setStatus(`${name}님, 환영해요! 웰컴 포인트 ${WELCOME_BONUS.toLocaleString('ko-KR')}P를 드렸어요.`, 'ok');
   } else {
     setStatus(`${name}님, 보유 포인트 ${result.balance.toLocaleString('ko-KR')}P를 불러왔어요.`, 'ok');
@@ -535,7 +552,8 @@ async function confirmBuy(){
       name: region.n,
       target: String(defScore),
       nick: currentNickname,
-      color: selectedColor
+      color: selectedColor,
+      prevOwner: existing.owner || ''
     });
     location.href = 'index.html?' + params.toString();
     return;
