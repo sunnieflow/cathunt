@@ -56,6 +56,10 @@ window.getAndClearNotifications = async function(name) {
     return items;
   } catch(e) { console.error(e); return []; }
 };
+window.isBanned = async function(name) {
+  try { const snap = await getDoc(doc(db, "banned", name)); return snap.exists(); }
+  catch(e) { console.error(e); return false; }
+};
 </script>
 <style>
   :root{
@@ -137,6 +141,8 @@ window.getAndClearNotifications = async function(name) {
       <button id="loadPointsBtn" style="width:100%;margin-top:8px;padding:8px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--gold);font-size:12px;cursor:pointer;">내 포인트 불러오기</button>
       <label>색상</label>
       <div class="swatches" id="swatches"></div>
+      <label>한 줄 소개 (선택, 최대 20자 - 고향이면 남겨보세요)</label>
+      <input id="messageInput" maxlength="20" placeholder="예: 제 고향입니다 🏠">
       <div class="status" id="statusOut">이름을 입력하고 포인트를 불러온 다음, 시/군/구를 클릭하세요.</div>
       <h2 style="margin-top:18px">소유 랭킹</h2>
       <div id="ranking"><p class="empty-note">아직 아무도 땅을 사지 않았어요.</p></div>
@@ -478,7 +484,7 @@ function renderMap(){
     el.setAttribute('class', 'region ' + (owned ? 'owned' : 'empty'));
     if(owned) el.setAttribute('fill', owned.color);
     const title = document.createElementNS('http://www.w3.org/2000/svg','title');
-    title.textContent = r.n + (owned ? (' · ' + owned.owner + ' 소유') : ' (구매 가능)');
+    title.textContent = r.n + (owned ? (' · ' + owned.owner + ' 소유' + (owned.message ? (' · "' + owned.message + '"') : '')) : ' (구매 가능)');
     el.appendChild(title);
     el.addEventListener('click', () => openModal(r.c));
     svg.appendChild(el);
@@ -491,16 +497,20 @@ function openModal(code){
   document.getElementById('modalTitle').textContent = region.n;
   const sub = document.getElementById('modalSub');
   const confirmBtn = document.getElementById('confirmBtn');
+  const msgLine = existing && existing.message ? `<br>💬 "${escapeHtml(existing.message)}"` : '';
   if(existing){
     const defScore = existing.defenseScore || 0;
     if(existing.owner === currentNickname){
-      sub.textContent = '이미 내가 소유한 곳이에요.';
-      confirmBtn.style.display = 'none';
+      sub.innerHTML = '이미 내가 소유한 곳이에요.' + msgLine;
+      document.getElementById('messageInput').value = existing.message || '';
+      confirmBtn.style.display = 'block';
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = '💬 소개 메시지만 수정';
     } else if(!currentNickname){
-      sub.textContent = existing.owner + '님 소유예요. 도전하려면 먼저 이름을 입력하고 포인트를 불러오세요.';
+      sub.innerHTML = existing.owner + '님 소유예요. 도전하려면 먼저 이름을 입력하고 포인트를 불러오세요.' + msgLine;
       confirmBtn.style.display = 'none';
     } else {
-      sub.textContent = `${existing.owner}님 소유 (방어점수 ${defScore.toLocaleString('ko-KR')}점). 고양이헌트에서 이 점수를 넘으면 뺏을 수 있어요. 실패하면 1,000P를 잃어요.`;
+      sub.innerHTML = `${existing.owner}님 소유 (방어점수 ${defScore.toLocaleString('ko-KR')}점). 고양이헌트에서 이 점수를 넘으면 뺏을 수 있어요. 실패하면 1,000P를 잃어요.` + msgLine;
       confirmBtn.style.display = 'block';
       confirmBtn.disabled = false;
       confirmBtn.textContent = '⚔ 도전하러 가기';
@@ -545,6 +555,14 @@ async function confirmBuy(){
   if(!activeCode || !currentNickname) return;
   const existing = land[activeCode];
   const region = findRegion(activeCode);
+  const messageVal = document.getElementById('messageInput').value.trim().slice(0, 20);
+  if(existing && existing.owner === currentNickname){
+    land[activeCode] = { ...existing, message: messageVal };
+    await window.saveLand(activeCode, land[activeCode]);
+    renderMap(); closeModal();
+    setStatus(`${region.n}의 소개 메시지를 저장했어요.`, 'ok');
+    return;
+  }
   if(existing){
     const defScore = existing.defenseScore || 0;
     const params = new URLSearchParams({
@@ -560,7 +578,7 @@ async function confirmBuy(){
   }
   if(balance < PRICE) return;
   const owner = currentNickname;
-  land[activeCode] = { owner, color: selectedColor, defenseScore: 0 };
+  land[activeCode] = { owner, color: selectedColor, defenseScore: 0, message: messageVal };
   balance -= PRICE;
   await window.saveLand(activeCode, land[activeCode]);
   await window.spendPoints(currentNickname, PRICE);
