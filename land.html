@@ -578,7 +578,7 @@ async function confirmBuy(){
   }
   if(balance < PRICE) return;
   const owner = currentNickname;
-  land[activeCode] = { owner, color: selectedColor, defenseScore: 0, message: messageVal };
+  land[activeCode] = { owner, color: selectedColor, defenseScore: 50000, message: messageVal };
   balance -= PRICE;
   await window.saveLand(activeCode, land[activeCode]);
   await window.spendPoints(currentNickname, PRICE);
