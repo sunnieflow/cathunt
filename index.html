@@ -121,8 +121,16 @@ window.addPoints = async function(nickname, score) {
   try { await setDoc(doc(db, "points", nickname), { balance: increment(pts) }, { merge: true }); return pts; }
   catch(e) { console.error(e); return 0; }
 };
+const DEFENSE_CAP = 250000;
+const CROWN_THRESHOLD = 400000;
 window.claimLand = async function(code, owner, color, defenseScore) {
-  try { await setDoc(doc(db, "land", code), { owner, color, defenseScore }); return true; }
+  const capped = Math.min(defenseScore, DEFENSE_CAP);
+  const data = { owner, color, defenseScore: capped, actualScore: defenseScore };
+  try { await setDoc(doc(db, "land", code), data); return true; }
+  catch(e) { console.error(e); return false; }
+};
+window.incrementChallengesUsed = async function(name) {
+  try { await setDoc(doc(db, "points", name), { challengesUsed: increment(1) }, { merge: true }); return true; }
   catch(e) { console.error(e); return false; }
 };
 window.spendPoints = async function(nickname, amount) {
@@ -214,6 +222,7 @@ const challengeNick = challengeCode ? (urlParams.get('nick')||'') : '';
 const challengeColor = challengeCode ? (urlParams.get('color')||'#fac775') : '';
 const challengeName = challengeCode ? (urlParams.get('name')||'') : '';
 const challengePrevOwner = challengeCode ? (urlParams.get('prevOwner')||'') : '';
+const challengeDiscounted = challengeCode ? (urlParams.get('discounted')==='1') : false;
 if(challengeCode){
   const banner = document.createElement('div');
   banner.style.cssText = 'background:rgba(255,102,51,0.18);border:1px solid #ff6633;border-radius:10px;padding:8px 14px;margin:6px 0;font-size:clamp(11px,3vw,13px);color:#ffcc99;text-align:center;max-width:280px;';
@@ -758,12 +767,14 @@ function endGame(){
         if(window.claimLand)await window.claimLand(challengeCode, nick, challengeColor, finalScore);
         if(window.notifyLoss)await window.notifyLoss(challengePrevOwner, challengeName, nick);
         chEl.style.color='#7fff9f';
-        chEl.innerHTML=`⚔ 도전 성공! ${escapeAttr(challengeName)}을(를) 뺏었어요. <a href="/land.html" style="color:#fac775">지도에서 확인 →</a>`;
+        const discNote = challengeDiscounted ? ' (신규 할인 적용됨)' : '';
+        chEl.innerHTML=`⚔ 도전 성공${discNote}! ${escapeAttr(challengeName)}을(를) 뺏었어요. <a href="/land.html" style="color:#fac775">지도에서 확인 →</a>`;
       } else {
         if(window.spendPoints)await window.spendPoints(nick, 1000);
         chEl.style.color='#ff8877';
-        chEl.textContent=`⚔ 도전 실패... 방어점수(${challengeTarget.toLocaleString('ko-KR')})를 못 넘었어요. -1,000P`;
+        chEl.textContent=`⚔ 도전 실패... 목표점수(${challengeTarget.toLocaleString('ko-KR')})를 못 넘었어요. -1,000P`;
       }
+      if(challengeDiscounted && window.incrementChallengesUsed) await window.incrementChallengesUsed(nick);
     }
     if(window.getTopScores)window.getTopScores().then(renderRanking);
   };

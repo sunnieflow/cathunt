@@ -43,6 +43,12 @@ window.getPoints = async function(nickname, welcomeBonus) {
     return { balance: 0, isNew: true };
   } catch(e) { console.error(e); return { balance: 0, isNew: false }; }
 };
+window.getChallengesUsed = async function(name) {
+  try {
+    const snap = await getDoc(doc(db, "points", name));
+    return snap.exists() ? (snap.data().challengesUsed || 0) : 0;
+  } catch(e) { console.error(e); return 0; }
+};
 window.spendPoints = async function(nickname, amount) {
   try { await setDoc(doc(db, "points", nickname), { balance: increment(-amount) }, { merge: true }); return true; }
   catch(e) { console.error(e); return false; }
@@ -90,26 +96,6 @@ window.resetSeason = async function() {
     await setDoc(doc(db, "meta", "season"), { startedAt: Date.now(), recorded: false });
     return true;
   } catch(e) { console.error(e); return false; }
-};
-window.checkAndResetSeason = async function(maxDays) {
-  try {
-    const seasonRef = doc(db, "meta", "season");
-    const snap = await getDoc(seasonRef);
-    const now = Date.now();
-    if(!snap.exists()){
-      await setDoc(seasonRef, { startedAt: now, recorded: false });
-      return { resetted: false, startedAt: now };
-    }
-    const startedAt = snap.data().startedAt;
-    const maxMs = maxDays * 24 * 60 * 60 * 1000;
-    if(now - startedAt > maxMs){
-      const landSnap = await getDocs(collection(db, "land"));
-      for(const d of landSnap.docs){ await deleteDoc(d.ref); }
-      await setDoc(seasonRef, { startedAt: now, recorded: false });
-      return { resetted: true, startedAt: now };
-    }
-    return { resetted: false, startedAt };
-  } catch(e) { console.error(e); return { resetted: false, startedAt: Date.now() }; }
 };
 window.isBanned = async function(name) {
   try { const snap = await getDoc(doc(db, "banned", name)); return snap.exists(); }
@@ -188,10 +174,10 @@ window.isBanned = async function(name) {
     <div class="mapbox">
       <svg id="koreaSvg" viewBox="0 0 720 742.6" xmlns="http://www.w3.org/2000/svg"></svg>
       <div id="unifyBanner" style="display:none;background:rgba(255,200,0,0.15);border:1px solid #ffcc00;border-radius:10px;padding:10px 14px;margin-top:10px;text-align:center;font-size:14px;font-weight:700;color:#ffcc00;"></div>
-      <div id="seasonCountdown" style="text-align:center;font-size:12px;color:var(--muted);margin-top:8px;"></div>
       <div class="legend">
         <span><i style="background:var(--land-empty)"></i>빈 땅 (구매 가능)</span>
         <span><i style="background:var(--gold)"></i>독도 (대한민국, 거래 불가)</span>
+        <span>👑 CAT KING(40만점 이상)으로 뺏은 땅</span>
       </div>
     </div>
     <aside>
@@ -244,6 +230,11 @@ window.isBanned = async function(name) {
 <script>
 const PRICE = 3000;
 const WELCOME_BONUS = 2000;
+const NEWBIE_DISCOUNT_SCORE = 200000;
+const NEWBIE_DISCOUNT_USES = 3;
+const CROWN_THRESHOLD = 400000;
+let pendingChallengeTarget = null;
+let pendingChallengeDiscounted = false;
 const PALETTE = ['#fac775','#dd7f77','#77ddb0','#7f9fdd','#c277dd','#dddd77'];
 let selectedColor = PALETTE[0];
 let balance = 0;
@@ -576,11 +567,26 @@ function renderMap(){
     const owned = land[r.c];
     el.setAttribute('class', 'region ' + (owned ? 'owned' : 'empty'));
     if(owned) el.setAttribute('fill', owned.color);
+    const isCrowned = owned && owned.actualScore >= CROWN_THRESHOLD;
     const title = document.createElementNS('http://www.w3.org/2000/svg','title');
-    title.textContent = r.n + ' (' + getProvince(r.c) + ')' + (owned ? (' · ' + owned.owner + ' 소유' + (owned.message ? (' · "' + owned.message + '"') : '')) : ' (구매 가능)');
+    title.textContent = r.n + ' (' + getProvince(r.c) + ')' + (owned ? (' · ' + owned.owner + ' 소유' + (isCrowned ? ' · 👑 CAT KING 등급으로 획득' : '') + (owned.message ? (' · "' + owned.message + '"') : '')) : ' (구매 가능)');
     el.appendChild(title);
     el.addEventListener('click', () => openModal(r.c));
     svg.appendChild(el);
+    if(isCrowned){
+      const bbox = el.getBBox();
+      const cx = bbox.x + bbox.width / 2;
+      const cy = bbox.y + bbox.height / 2;
+      const crown = document.createElementNS('http://www.w3.org/2000/svg','text');
+      crown.setAttribute('x', cx);
+      crown.setAttribute('y', cy);
+      crown.setAttribute('text-anchor', 'middle');
+      crown.setAttribute('dominant-baseline', 'central');
+      crown.setAttribute('font-size', '5');
+      crown.setAttribute('pointer-events', 'none');
+      crown.textContent = '👑';
+      svg.appendChild(crown);
+    }
   });
 }
 function findRegion(code){ return REGIONS.find(r => r.c === code); }
@@ -638,10 +644,23 @@ function openModal(code){
       sub.innerHTML = existing.owner + '님 소유예요. 도전하려면 먼저 이름을 입력하고 포인트를 불러오세요.' + msgLine;
       confirmBtn.style.display = 'none';
     } else {
-      sub.innerHTML = `${existing.owner}님 소유 (방어점수 ${defScore.toLocaleString('ko-KR')}점). 고양이헌트에서 이 점수를 넘으면 뺏을 수 있어요. 실패하면 1,000P를 잃어요.` + msgLine;
+      sub.innerHTML = `${existing.owner}님 소유${existing.actualScore >= CROWN_THRESHOLD ? " 👑" : ""} (방어점수 ${defScore.toLocaleString('ko-KR')}점). 확인 중...` + msgLine;
       confirmBtn.style.display = 'block';
-      confirmBtn.disabled = false;
+      confirmBtn.disabled = true;
       confirmBtn.textContent = '⚔ 도전하러 가기';
+      pendingChallengeTarget = defScore;
+      pendingChallengeDiscounted = false;
+      window.getChallengesUsed(currentNickname).then(used => {
+        const discount = used < NEWBIE_DISCOUNT_USES ? NEWBIE_DISCOUNT_SCORE : 0;
+        pendingChallengeTarget = Math.max(0, defScore - discount);
+        pendingChallengeDiscounted = discount > 0;
+        if(activeCode !== code) return;
+        const discountNote = pendingChallengeDiscounted
+          ? `<br>🎓 신규 혜택 적용! 실제 목표점수는 ${pendingChallengeTarget.toLocaleString('ko-KR')}점이에요 (남은 혜택 ${NEWBIE_DISCOUNT_USES - used}회)`
+          : '';
+        sub.innerHTML = `${existing.owner}님 소유${existing.actualScore >= CROWN_THRESHOLD ? " 👑" : ""} (방어점수 ${defScore.toLocaleString('ko-KR')}점). 고양이헌트에서 이 점수를 넘으면 뺏을 수 있어요. 실패하면 1,000P를 잃어요.${discountNote}` + msgLine;
+        confirmBtn.disabled = false;
+      });
     }
   } else if(!currentNickname){
     sub.textContent = '먼저 이름을 입력하고 "내 포인트 불러오기"를 눌러주세요.';
@@ -697,13 +716,15 @@ async function confirmBuy(){
   }
   if(existing){
     const defScore = existing.defenseScore || 0;
+    const effectiveTarget = pendingChallengeTarget !== null ? pendingChallengeTarget : defScore;
     const params = new URLSearchParams({
       challenge: activeCode,
       name: region.n,
-      target: String(defScore),
+      target: String(effectiveTarget),
       nick: currentNickname,
       color: selectedColor,
-      prevOwner: existing.owner || ''
+      prevOwner: existing.owner || '',
+      discounted: pendingChallengeDiscounted ? '1' : '0'
     });
     location.href = 'index.html?' + params.toString();
     return;
@@ -784,27 +805,8 @@ if(isAdmin){
   });
 }
 
-const SEASON_MAX_DAYS = 30;
-async function checkSeason(){
-  const result = await window.checkAndResetSeason(SEASON_MAX_DAYS);
-  if(result.resetted){
-    land = {};
-    renderMap(); renderRanking();
-    setStatus('한 달이 지나 시즌이 자동으로 초기화됐어요! 새 시즌이 시작됐어요.', 'ok');
-  }
-  renderSeasonCountdown(result.startedAt);
-}
-function renderSeasonCountdown(startedAt){
-  const el = document.getElementById('seasonCountdown');
-  if(!el || !startedAt) return;
-  const maxMs = SEASON_MAX_DAYS * 24 * 60 * 60 * 1000;
-  const elapsed = Date.now() - startedAt;
-  const remainMs = Math.max(0, maxMs - elapsed);
-  const remainDays = Math.ceil(remainMs / (24 * 60 * 60 * 1000));
-  el.textContent = `⏳ 이번 시즌 종료까지 D-${remainDays} (${SEASON_MAX_DAYS}일마다 자동 초기화)`;
-}
 function init(){
-  renderBalance(); renderSwatches(); renderMap(); loadLand(); loadHallOfFame(); checkSeason();
+  renderBalance(); renderSwatches(); renderMap(); loadLand(); loadHallOfFame();
 }
 if(document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', init);
