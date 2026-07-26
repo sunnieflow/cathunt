@@ -95,6 +95,9 @@ window.isBanned = async function(name) {
   aside h2{font-size:14px;margin:0 0 10px;font-weight:700;}
   aside label{font-size:12px;color:var(--muted);display:block;margin:12px 0 4px;}
   aside input{width:100%;padding:8px 10px;background:#0b0019;border:1px solid var(--line);border-radius:6px;color:var(--text);font-size:13px;}
+  .search-item{padding:6px 8px;font-size:12px;cursor:pointer;border-radius:5px;color:var(--text);}
+  .search-item:hover{background:rgba(127,119,221,0.2);}
+  .search-item .prov{color:var(--muted);font-size:11px;}
   .swatches{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;}
   .sw{width:24px;height:24px;border-radius:5px;cursor:pointer;border:2px solid transparent;}
   .sw.sel{border-color:var(--text);}
@@ -129,12 +132,16 @@ window.isBanned = async function(name) {
   <div class="board">
     <div class="mapbox">
       <svg id="koreaSvg" viewBox="0 0 700 1308.9" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="unifyBanner" style="display:none;background:rgba(255,200,0,0.15);border:1px solid #ffcc00;border-radius:10px;padding:10px 14px;margin-top:10px;text-align:center;font-size:14px;font-weight:700;color:#ffcc00;"></div>
       <div class="legend">
         <span><i style="background:var(--land-empty)"></i>빈 땅 (구매 가능)</span>
         <span><i style="background:var(--nk)"></i>북한 (비활성)</span>
       </div>
     </div>
     <aside>
+      <label>지역 검색 (예: 종로구)</label>
+      <input id="searchInput" placeholder="지역 이름 입력" autocomplete="off">
+      <div id="searchResults" style="max-height:160px;overflow-y:auto;margin-top:4px;"></div>
       <h2>내 정보</h2>
       <label>소유자 이름 (고양이헌트 닉네임과 동일하게)</label>
       <input id="ownerInput" maxlength="10" placeholder="예: 민준">
@@ -455,13 +462,25 @@ function renderRanking(){
   const counts = {};
   Object.values(land).forEach(v => { counts[v.owner] = (counts[v.owner]||0) + 1; });
   const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const banner = document.getElementById('unifyBanner');
+  const TOTAL = REGIONS.length;
   if(entries.length === 0){
     ranking.innerHTML = '<p class="empty-note">아직 아무도 땅을 사지 않았어요.</p>';
+    banner.style.display = 'none';
     return;
   }
-  ranking.innerHTML = entries.slice(0,10).map(([name,count]) =>
-    `<div class="rank-row"><span class="rank-name">${escapeHtml(name)}</span><span class="rank-count">${count}곳</span></div>`
-  ).join('');
+  const [topName, topCount] = entries[0];
+  if(topCount >= TOTAL){
+    banner.style.display = 'block';
+    banner.textContent = `🏆 천하통일 달성! ${topName}님이 대한민국 ${TOTAL}곳을 전부 소유했어요!`;
+  } else {
+    banner.style.display = 'none';
+  }
+  ranking.innerHTML = entries.slice(0,10).map(([name,count], i) => {
+    const remain = i === 0 ? TOTAL - count : null;
+    const remainText = (i === 0 && count < TOTAL) ? ` <span style="color:var(--muted);font-size:11px;">(천하통일까지 ${remain}곳 남음)</span>` : '';
+    return `<div class="rank-row"><span class="rank-name">${escapeHtml(name)}${remainText}</span><span class="rank-count">${count}곳</span></div>`;
+  }).join('');
 }
 function renderMap(){
   svg.innerHTML = '';
@@ -484,17 +503,47 @@ function renderMap(){
     el.setAttribute('class', 'region ' + (owned ? 'owned' : 'empty'));
     if(owned) el.setAttribute('fill', owned.color);
     const title = document.createElementNS('http://www.w3.org/2000/svg','title');
-    title.textContent = r.n + (owned ? (' · ' + owned.owner + ' 소유' + (owned.message ? (' · "' + owned.message + '"') : '')) : ' (구매 가능)');
+    title.textContent = r.n + ' (' + getProvince(r.c) + ')' + (owned ? (' · ' + owned.owner + ' 소유' + (owned.message ? (' · "' + owned.message + '"') : '')) : ' (구매 가능)');
     el.appendChild(title);
     el.addEventListener('click', () => openModal(r.c));
     svg.appendChild(el);
   });
 }
 function findRegion(code){ return REGIONS.find(r => r.c === code); }
+
+const PROVINCE_MAP = {
+  '11':'서울', '21':'부산', '22':'대구', '23':'인천', '24':'광주',
+  '25':'대전', '26':'울산', '29':'세종', '31':'경기', '32':'강원',
+  '33':'충북', '34':'충남', '35':'전북', '36':'전남', '37':'경북',
+  '38':'경남', '39':'제주'
+};
+function getProvince(code){ return PROVINCE_MAP[code.slice(0,2)] || ''; }
+
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.trim();
+  if(!q){ searchResults.innerHTML = ''; return; }
+  const matches = REGIONS.filter(r => r.n.includes(q)).slice(0, 15);
+  if(matches.length === 0){
+    searchResults.innerHTML = '<div class="search-item" style="color:var(--muted);cursor:default;">검색 결과 없음</div>';
+    return;
+  }
+  searchResults.innerHTML = matches.map(r =>
+    `<div class="search-item" data-code="${r.c}">${escapeHtml(r.n)} <span class="prov">(${getProvince(r.c)})</span></div>`
+  ).join('');
+  searchResults.querySelectorAll('.search-item[data-code]').forEach(el => {
+    el.addEventListener('click', () => {
+      openModal(el.getAttribute('data-code'));
+      searchInput.value = '';
+      searchResults.innerHTML = '';
+    });
+  });
+});
 function openModal(code){
   const region = findRegion(code);
   const existing = land[code];
-  document.getElementById('modalTitle').textContent = region.n;
+  document.getElementById('modalTitle').textContent = region.n + ' (' + getProvince(region.c) + ')';
   const sub = document.getElementById('modalSub');
   const confirmBtn = document.getElementById('confirmBtn');
   const msgLine = existing && existing.message ? `<br>💬 "${escapeHtml(existing.message)}"` : '';
