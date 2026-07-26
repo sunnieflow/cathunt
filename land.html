@@ -7,6 +7,14 @@
 <meta property="og:title" content="한국땅땅">
 <meta property="og:description" content="대한민국 251개 시/군/구를 클릭해서 소유하는 땅따먹기 게임. 고양이헌트 점수로 포인트를 모아 도전해보세요.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-E0BKBWPDJW"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-E0BKBWPDJW');
+</script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, increment, query, where, deleteDoc, addDoc, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -765,6 +773,11 @@ modalBack.addEventListener('click', (e) => { if(e.target === modalBack) closeMod
 
 function init(){
   renderBalance(); renderSwatches(); renderMap(); loadLand(); loadHallOfFame();
+  const nickFromUrl = new URLSearchParams(location.search).get('nick');
+  if(nickFromUrl){
+    document.getElementById('ownerInput').value = nickFromUrl;
+    loadPoints();
+  }
 }
 if(document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', init);

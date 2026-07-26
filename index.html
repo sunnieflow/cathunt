@@ -759,8 +759,8 @@ function endGame(){
     btn.textContent=lang==='kr'?'등록 완료 ✓':'Saved ✓';btn.style.background='#44aa66';
     const pointsEl=document.getElementById('points-earned');
     if(pointsEl)pointsEl.innerHTML=(lang==='kr'
-      ? `+${earned.toLocaleString('ko-KR')}P 적립! <a href="/land.html" style="color:#fac775">땅 사러가기 →</a>`
-      : `+${earned.toLocaleString('en-US')}P earned! <a href="/land.html" style="color:#fac775">Buy land →</a>`);
+      ? `+${earned.toLocaleString('ko-KR')}P 적립! <a href="/land.html?nick=${encodeURIComponent(nick)}" style="color:#fac775">땅 사러가기 →</a>`
+      : `+${earned.toLocaleString('en-US')}P earned! <a href="/land.html?nick=${encodeURIComponent(nick)}" style="color:#fac775">Buy land →</a>`);
     const chEl=document.getElementById('challenge-result');
     if(challengeCode && chEl){
       if(finalScore > challengeTarget){
@@ -768,7 +768,7 @@ function endGame(){
         if(window.notifyLoss)await window.notifyLoss(challengePrevOwner, challengeName, nick);
         chEl.style.color='#7fff9f';
         const discNote = challengeDiscounted ? ' (신규 할인 적용됨)' : '';
-        chEl.innerHTML=`⚔ 도전 성공${discNote}! ${escapeAttr(challengeName)}을(를) 뺏었어요. <a href="/land.html" style="color:#fac775">지도에서 확인 →</a>`;
+        chEl.innerHTML=`⚔ 도전 성공${discNote}! ${escapeAttr(challengeName)}을(를) 뺏었어요. <a href="/land.html?nick=${encodeURIComponent(nick)}" style="color:#fac775">지도에서 확인 →</a>`;
       } else {
         if(window.spendPoints)await window.spendPoints(nick, 1000);
         chEl.style.color='#ff8877';
