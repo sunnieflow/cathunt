@@ -173,10 +173,6 @@ window.isBanned = async function(name) {
       <label>소유자 이름 (고양이헌트 닉네임과 동일하게)</label>
       <input id="ownerInput" maxlength="10" placeholder="예: 민준">
       <button id="loadPointsBtn" style="width:100%;margin-top:8px;padding:8px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--gold);font-size:12px;cursor:pointer;">내 포인트 불러오기</button>
-      <label>색상</label>
-      <div class="swatches" id="swatches"></div>
-      <label>한 줄 소개 (선택, 최대 20자 - 고향이면 남겨보세요)</label>
-      <input id="messageInput" maxlength="20" placeholder="예: 제 고향입니다 🏠">
       <div class="status" id="statusOut">이름을 입력하고 포인트를 불러온 다음, 시/군/구를 클릭하세요.</div>
       <h2 style="margin-top:18px">소유 랭킹</h2>
       <div id="ranking"><p class="empty-note">아직 아무도 땅을 사지 않았어요.</p></div>
@@ -202,7 +198,13 @@ window.isBanned = async function(name) {
   <div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;width:280px;">
     <h3 id="modalTitle" style="margin:0 0 4px;font-size:16px;"></h3>
     <p id="modalSub" style="margin:0 0 14px;color:var(--muted);font-size:12px;"></p>
-    <div style="display:flex;gap:8px;margin-top:8px;">
+    <div id="modalEditFields" style="display:none;">
+      <label style="font-size:12px;color:var(--muted);display:block;margin:10px 0 4px;">색상</label>
+      <div class="swatches" id="swatches"></div>
+      <label style="font-size:12px;color:var(--muted);display:block;margin:10px 0 4px;">한 줄 소개 (선택, 최대 20자)</label>
+      <input id="messageInput" maxlength="20" placeholder="예: 제 고향입니다 🏠" style="width:100%;padding:8px 10px;background:#0b0019;border:1px solid var(--line);border-radius:6px;color:var(--text);font-size:13px;">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
       <button id="cancelBtn" style="flex:1;padding:9px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--text);font-size:13px;cursor:pointer;">취소</button>
       <button id="confirmBtn" style="flex:1;padding:9px;border-radius:6px;border:1px solid #7f77dd;background:#7f77dd;color:#fff;font-weight:700;font-size:13px;cursor:pointer;">구매하기 (3000P)</button>
     </div>
@@ -588,7 +590,9 @@ function openModal(code){
   document.getElementById('modalTitle').textContent = region.n + ' (' + getProvince(region.c) + ')';
   const sub = document.getElementById('modalSub');
   const confirmBtn = document.getElementById('confirmBtn');
+  const editFields = document.getElementById('modalEditFields');
   const msgLine = existing && existing.message ? `<br>💬 "${escapeHtml(existing.message)}"` : '';
+  editFields.style.display = 'none';
   if(existing){
     const defScore = existing.defenseScore || 0;
     if(existing.owner === currentNickname){
@@ -596,6 +600,7 @@ function openModal(code){
       document.getElementById('messageInput').value = existing.message || '';
       selectedColor = existing.color || PALETTE[0];
       renderSwatches();
+      editFields.style.display = 'block';
       confirmBtn.style.display = 'block';
       confirmBtn.disabled = false;
       confirmBtn.textContent = '🎨 색상/소개 저장';
@@ -613,6 +618,10 @@ function openModal(code){
     confirmBtn.style.display = 'none';
   } else {
     sub.textContent = `${region.n}을(를) ${PRICE.toLocaleString('ko-KR')}P에 구매할까요? (${currentNickname}님 보유: ${balance.toLocaleString('ko-KR')}P)`;
+    document.getElementById('messageInput').value = '';
+    selectedColor = PALETTE[0];
+    renderSwatches();
+    editFields.style.display = 'block';
     confirmBtn.style.display = 'block';
     confirmBtn.disabled = balance < PRICE;
     confirmBtn.textContent = balance < PRICE ? '포인트 부족' : `구매하기 (${PRICE}P)`;
