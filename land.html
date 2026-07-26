@@ -70,10 +70,18 @@ window.logHallOfFame = async function(name) {
 };
 window.getHallOfFame = async function() {
   try {
-    const q = query(collection(db, "halloffame"), orderBy("achievedAt", "desc"), limit(10));
+    const q = query(collection(db, "halloffame"), orderBy("achievedAt", "desc"), limit(3));
     const snap = await getDocs(q);
     return snap.docs.map(d => d.data());
   } catch(e) { console.error(e); return []; }
+};
+window.getFastestRecord = async function() {
+  try {
+    const q = query(collection(db, "halloffame"), orderBy("durationMs", "asc"), limit(50));
+    const snap = await getDocs(q);
+    const docs = snap.docs.map(d => d.data()).filter(h => typeof h.durationMs === 'number' && h.durationMs > 0);
+    return docs.length > 0 ? docs[0] : null;
+  } catch(e) { console.error(e); return null; }
 };
 window.resetSeason = async function() {
   try {
@@ -82,6 +90,26 @@ window.resetSeason = async function() {
     await setDoc(doc(db, "meta", "season"), { startedAt: Date.now(), recorded: false });
     return true;
   } catch(e) { console.error(e); return false; }
+};
+window.checkAndResetSeason = async function(maxDays) {
+  try {
+    const seasonRef = doc(db, "meta", "season");
+    const snap = await getDoc(seasonRef);
+    const now = Date.now();
+    if(!snap.exists()){
+      await setDoc(seasonRef, { startedAt: now, recorded: false });
+      return { resetted: false, startedAt: now };
+    }
+    const startedAt = snap.data().startedAt;
+    const maxMs = maxDays * 24 * 60 * 60 * 1000;
+    if(now - startedAt > maxMs){
+      const landSnap = await getDocs(collection(db, "land"));
+      for(const d of landSnap.docs){ await deleteDoc(d.ref); }
+      await setDoc(seasonRef, { startedAt: now, recorded: false });
+      return { resetted: true, startedAt: now };
+    }
+    return { resetted: false, startedAt };
+  } catch(e) { console.error(e); return { resetted: false, startedAt: Date.now() }; }
 };
 window.isBanned = async function(name) {
   try { const snap = await getDoc(doc(db, "banned", name)); return snap.exists(); }
@@ -160,6 +188,7 @@ window.isBanned = async function(name) {
     <div class="mapbox">
       <svg id="koreaSvg" viewBox="0 0 720 742.6" xmlns="http://www.w3.org/2000/svg"></svg>
       <div id="unifyBanner" style="display:none;background:rgba(255,200,0,0.15);border:1px solid #ffcc00;border-radius:10px;padding:10px 14px;margin-top:10px;text-align:center;font-size:14px;font-weight:700;color:#ffcc00;"></div>
+      <div id="seasonCountdown" style="text-align:center;font-size:12px;color:var(--muted);margin-top:8px;"></div>
       <div class="legend">
         <span><i style="background:var(--land-empty)"></i>빈 땅 (구매 가능)</span>
         <span><i style="background:var(--gold)"></i>독도 (대한민국, 거래 불가)</span>
@@ -178,6 +207,7 @@ window.isBanned = async function(name) {
       <div id="ranking"><p class="empty-note">아직 아무도 땅을 사지 않았어요.</p></div>
       <h2 style="margin-top:18px">🏆 명예의전당</h2>
       <div id="hallOfFame"><p class="empty-note">아직 천하통일한 사람이 없어요.</p></div>
+      <div id="fastestRecord" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
     </aside>
   </div>
 
@@ -705,18 +735,23 @@ function formatDuration(ms){
 }
 async function loadHallOfFame(){
   const el = document.getElementById('hallOfFame');
+  const fastestEl = document.getElementById('fastestRecord');
   if(!window.getHallOfFame) return;
   const list = await window.getHallOfFame();
   if(!list || list.length === 0){
     el.innerHTML = '<p class="empty-note">아직 천하통일한 사람이 없어요.</p>';
-    return;
+  } else {
+    el.innerHTML = list.map((h) => {
+      const date = new Date(h.achievedAt);
+      const dateStr = `${date.getFullYear()}.${date.getMonth()+1}.${date.getDate()}`;
+      const durText = h.durationMs !== null && h.durationMs !== undefined ? ` · ${formatDuration(h.durationMs)} 소요` : '';
+      return `<div class="rank-row"><span class="rank-name">${escapeHtml(h.name)}</span><span class="rank-count" style="font-size:10px;">${dateStr}${durText}</span></div>`;
+    }).join('');
   }
-  el.innerHTML = list.map((h, i) => {
-    const date = new Date(h.achievedAt);
-    const dateStr = `${date.getFullYear()}.${date.getMonth()+1}.${date.getDate()}`;
-    const durText = h.durationMs !== null && h.durationMs !== undefined ? ` · ${formatDuration(h.durationMs)} 소요` : '';
-    return `<div class="rank-row"><span class="rank-name">${list.length - i}대 ${escapeHtml(h.name)}</span><span class="rank-count" style="font-size:10px;">${dateStr}${durText}</span></div>`;
-  }).join('');
+  if(window.getFastestRecord && fastestEl){
+    const fastest = await window.getFastestRecord();
+    fastestEl.textContent = fastest ? `⚡ 최단시간 기록: ${fastest.name}님 (${formatDuration(fastest.durationMs)})` : '';
+  }
 }
 document.getElementById('cancelBtn').addEventListener('click', closeModal);
 document.getElementById('confirmBtn').addEventListener('click', confirmBuy);
@@ -749,8 +784,27 @@ if(isAdmin){
   });
 }
 
+const SEASON_MAX_DAYS = 30;
+async function checkSeason(){
+  const result = await window.checkAndResetSeason(SEASON_MAX_DAYS);
+  if(result.resetted){
+    land = {};
+    renderMap(); renderRanking();
+    setStatus('한 달이 지나 시즌이 자동으로 초기화됐어요! 새 시즌이 시작됐어요.', 'ok');
+  }
+  renderSeasonCountdown(result.startedAt);
+}
+function renderSeasonCountdown(startedAt){
+  const el = document.getElementById('seasonCountdown');
+  if(!el || !startedAt) return;
+  const maxMs = SEASON_MAX_DAYS * 24 * 60 * 60 * 1000;
+  const elapsed = Date.now() - startedAt;
+  const remainMs = Math.max(0, maxMs - elapsed);
+  const remainDays = Math.ceil(remainMs / (24 * 60 * 60 * 1000));
+  el.textContent = `⏳ 이번 시즌 종료까지 D-${remainDays} (${SEASON_MAX_DAYS}일마다 자동 초기화)`;
+}
 function init(){
-  renderBalance(); renderSwatches(); renderMap(); loadLand(); loadHallOfFame();
+  renderBalance(); renderSwatches(); renderMap(); loadLand(); loadHallOfFame(); checkSeason();
 }
 if(document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', init);
