@@ -89,14 +89,6 @@ window.getFastestRecord = async function() {
     return docs.length > 0 ? docs[0] : null;
   } catch(e) { console.error(e); return null; }
 };
-window.resetSeason = async function() {
-  try {
-    const snap = await getDocs(collection(db, "land"));
-    for(const d of snap.docs){ await deleteDoc(d.ref); }
-    await setDoc(doc(db, "meta", "season"), { startedAt: Date.now(), recorded: false });
-    return true;
-  } catch(e) { console.error(e); return false; }
-};
 window.isBanned = async function(name) {
   try { const snap = await getDoc(doc(db, "banned", name)); return snap.exists(); }
   catch(e) { console.error(e); return false; }
@@ -195,14 +187,6 @@ window.isBanned = async function(name) {
       <div id="hallOfFame"><p class="empty-note">아직 천하통일한 사람이 없어요.</p></div>
       <div id="fastestRecord" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
     </aside>
-  </div>
-
-  <div id="adminPanel" style="display:none;max-width:1240px;margin:20px auto 0;background:#2a1515;border:1px solid #cc4444;border-radius:10px;padding:16px;">
-    <h2 style="margin:0 0 8px;color:#ff8877;">⚠ 관리자: 시즌 리셋</h2>
-    <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">모든 땅 소유 정보가 삭제되고 새 시즌이 시작돼요. 되돌릴 수 없어요.</p>
-    <input id="resetConfirmInput" placeholder='확인을 위해 "RESET" 입력' style="width:220px;padding:8px 10px;background:#0b0019;border:1px solid var(--line);border-radius:6px;color:var(--text);font-size:13px;">
-    <button id="resetBtn" style="margin-left:8px;padding:8px 16px;border-radius:6px;border:1px solid #cc4444;background:#cc4444;color:#fff;font-weight:700;cursor:pointer;">시즌 리셋 실행</button>
-    <div id="resetMsg" style="font-size:12px;color:var(--gold);margin-top:8px;"></div>
   </div>
 
   <footer>
@@ -778,32 +762,6 @@ document.getElementById('cancelBtn').addEventListener('click', closeModal);
 document.getElementById('confirmBtn').addEventListener('click', confirmBuy);
 document.getElementById('loadPointsBtn').addEventListener('click', loadPoints);
 modalBack.addEventListener('click', (e) => { if(e.target === modalBack) closeModal(); });
-
-const isAdmin = new URLSearchParams(location.search).get('admin') === '1';
-if(isAdmin){
-  document.getElementById('adminPanel').style.display = 'block';
-  document.getElementById('resetBtn').addEventListener('click', async () => {
-    const input = document.getElementById('resetConfirmInput');
-    const msg = document.getElementById('resetMsg');
-    if(input.value.trim() !== 'RESET'){
-      msg.style.color = '#ff6666';
-      msg.textContent = '"RESET"을 정확히 입력해주세요.';
-      return;
-    }
-    msg.style.color = 'var(--gold)';
-    msg.textContent = '리셋 중...';
-    const ok = await window.resetSeason();
-    if(ok){
-      msg.textContent = '리셋 완료! 새 시즌이 시작됐어요.';
-      input.value = '';
-      land = {};
-      renderMap(); renderRanking();
-    } else {
-      msg.style.color = '#ff6666';
-      msg.textContent = '리셋 실패, 다시 시도해주세요.';
-    }
-  });
-}
 
 function init(){
   renderBalance(); renderSwatches(); renderMap(); loadLand(); loadHallOfFame();
