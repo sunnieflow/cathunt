@@ -644,7 +644,7 @@ function openModal(code){
       pendingChallengeDiscounted = false;
       window.getChallengesUsed(currentNickname).then(used => {
         const discount = used < NEWBIE_DISCOUNT_USES ? NEWBIE_DISCOUNT_SCORE : 0;
-        pendingChallengeTarget = Math.max(0, defScore - discount);
+        pendingChallengeTarget = Math.max(50000, defScore - discount);
         pendingChallengeDiscounted = discount > 0;
         if(activeCode !== code) return;
         const discountNote = pendingChallengeDiscounted
