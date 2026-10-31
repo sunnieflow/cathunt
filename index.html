@@ -99,7 +99,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
 </style>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, query, orderBy, limit, getDocs, doc, setDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const firebaseConfig = {
   apiKey: "AIzaSyAIX72G7ZdATJSUP-hCoBjkJ-dgKU2AgVA",
   authDomain: "cathunt-2612c.firebaseapp.com",
@@ -115,32 +115,6 @@ window.saveScore = async function(nickname, score) {
 };
 window.getTopScores = async function() {
   try { const q = query(collection(db, "scores"), orderBy("score", "desc"), limit(10)); const snap = await getDocs(q); return snap.docs.map(d => d.data()); } catch(e) { return []; }
-};
-window.addPoints = async function(nickname, score) {
-  const pts = Math.floor(score / 100);
-  try { await setDoc(doc(db, "points", nickname), { balance: increment(pts) }, { merge: true }); return pts; }
-  catch(e) { console.error(e); return 0; }
-};
-const DEFENSE_CAP = 250000;
-const CROWN_THRESHOLD = 400000;
-window.claimLand = async function(code, owner, color, defenseScore) {
-  const capped = Math.min(defenseScore, DEFENSE_CAP);
-  const data = { owner, color, defenseScore: capped, actualScore: defenseScore };
-  try { await setDoc(doc(db, "land", code), data); return true; }
-  catch(e) { console.error(e); return false; }
-};
-window.incrementChallengesUsed = async function(name) {
-  try { await setDoc(doc(db, "points", name), { challengesUsed: increment(1) }, { merge: true }); return true; }
-  catch(e) { console.error(e); return false; }
-};
-window.spendPoints = async function(nickname, amount) {
-  try { await setDoc(doc(db, "points", nickname), { balance: increment(-amount) }, { merge: true }); return true; }
-  catch(e) { console.error(e); return false; }
-};
-window.notifyLoss = async function(toName, regionName, byName) {
-  if(!toName) return;
-  try { await addDoc(collection(db, "notifications"), { to: toName, region: regionName, by: byName, date: new Date() }); }
-  catch(e) { console.error(e); }
 };
 </script>
 </head>
@@ -186,7 +160,6 @@ window.notifyLoss = async function(toName, regionName, byName) {
       <button class="lang-btn unselected" id="btn-en" onclick="setLang('en')">English</button>
     </div>
     <button class="gbtn gbtn-main" id="startBtn"></button>
-    <a href="/land.html" style="margin-top:14px;padding:6px 4px;font-size:clamp(11px,2.8vw,13px);color:#fac775;text-decoration:none;">🗺 한국땅땅 - 점수로 땅 사러가기 →</a>
     <button id="install-btn" onclick="triggerInstall()">📲 Add to Home Screen</button>
     <button id="share-btn" onclick="copyShareLink()" style="margin-top:16px;background:rgba(127,119,221,0.18);border:1px solid rgba(127,119,221,0.45);border-radius:20px;color:#b8b0ff;font-size:clamp(11px,2.8vw,13px);padding:7px 18px;cursor:pointer;font-weight:600;">🔗 링크 복사해서 공유하기</button>
     <div id="share-msg" style="font-size:12px;color:#fac775;min-height:16px;margin-top:4px;"></div>
@@ -215,20 +188,6 @@ function applyStrings(){
 }
 
 const gc=document.getElementById('gc'),cv=document.getElementById('cv'),ctx=cv.getContext('2d'),ov=document.getElementById('ov');
-const urlParams = new URLSearchParams(location.search);
-const challengeCode = urlParams.get('challenge');
-const challengeTarget = challengeCode ? parseInt(urlParams.get('target')||'0',10) : null;
-const challengeNick = challengeCode ? (urlParams.get('nick')||'') : '';
-const challengeColor = challengeCode ? (urlParams.get('color')||'#fac775') : '';
-const challengeName = challengeCode ? (urlParams.get('name')||'') : '';
-const challengePrevOwner = challengeCode ? (urlParams.get('prevOwner')||'') : '';
-const challengeDiscounted = challengeCode ? (urlParams.get('discounted')==='1') : false;
-if(challengeCode){
-  const banner = document.createElement('div');
-  banner.style.cssText = 'background:rgba(255,102,51,0.18);border:1px solid #ff6633;border-radius:10px;padding:8px 14px;margin:6px 0;font-size:clamp(11px,3vw,13px);color:#ffcc99;text-align:center;max-width:280px;';
-  banner.textContent = `⚔ 도전 모드: ${challengeName} (방어점수 ${challengeTarget.toLocaleString('ko-KR')}점 이상 필요)`;
-  ov.insertBefore(banner, document.getElementById('startBtn'));
-}
 const LANES=3,MAX_LIVES=3;
 let W,H,LW,LX=[],groundY,jumpPeak;
 let state='idle',raf;
@@ -723,11 +682,9 @@ function endGame(){
       '<button class="lang-btn '+(lang==='kr'?'selected':'unselected')+'" onclick="setLang(\'kr\')">한국어</button>'+
       '<button class="lang-btn '+(lang==='en'?'selected':'unselected')+'" onclick="setLang(\'en\')">English</button>'+
     '</div>'+
-    '<input id="nick-input" type="text" maxlength="10" placeholder="'+nickPlaceholder+'" value="'+escapeAttr(challengeNick)+'" style="background:rgba(127,119,221,0.15);border:1px solid rgba(127,119,221,0.4);border-radius:12px;color:#fff;font-size:clamp(13px,3.5vw,16px);padding:10px 16px;text-align:center;width:200px;outline:none;margin-top:2px;">'+
+    '<input id="nick-input" type="text" maxlength="10" placeholder="'+nickPlaceholder+'" value="'+escapeAttr(localStorage.getItem('cathunt_nick')||'')+'" style="background:rgba(127,119,221,0.15);border:1px solid rgba(127,119,221,0.4);border-radius:12px;color:#fff;font-size:clamp(13px,3.5vw,16px);padding:10px 16px;text-align:center;width:200px;outline:none;margin-top:2px;">'+
     '<button class="gbtn gbtn-main" id="submitBtn" onclick="window.submitScore()" style="margin-top:6px;padding:10px 28px;font-size:clamp(12px,3.5vw,15px)">'+submitLabel+'</button>'+
-    '<div id="points-earned" style="font-size:12px;color:#9882cc;margin-top:8px;min-height:16px;"></div>'+
-    '<div id="challenge-result" style="font-size:13px;font-weight:700;margin-top:4px;min-height:16px;"></div>'+
-    '<div id="rank-list" style="width:100%;max-width:280px;margin-top:6px;min-height:30px;text-align:center"></div>'+
+    '<div id="rank-list" style="width:100%;max-width:280px;margin-top:10px;min-height:30px;text-align:center"></div>'+
     '<button class="gbtn gbtn-main" onclick="startGame()" style="margin-top:8px">'+T('retry')+'</button>';
   ov.style.display='flex';
   function renderRanking(scores){
@@ -739,7 +696,7 @@ function endGame(){
         const gname=lang==='kr'?g.kr:g.badge;
         const rankCol=i===0?'#ffd060':i===1?'#cccccc':i===2?'#cd7f32':'#9882cc';
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 10px;font-size:clamp(10px,2.5vw,12px);">'+
-          '<span style="color:'+rankCol+'">'+(i+1)+'. '+s.nickname+'</span>'+
+          '<span style="color:'+rankCol+'">'+(i+1)+'. '+escapeAttr(s.nickname)+'</span>'+
           '<span style="display:flex;align-items:center;gap:6px">'+
             '<span style="font-size:9px;color:'+g.col+';border:1px solid '+g.col+';border-radius:8px;padding:1px 5px">'+gname+'</span>'+
             '<span style="color:'+rankCol+'">'+Math.floor(s.score).toLocaleString()+'</span>'+
@@ -754,28 +711,8 @@ function endGame(){
     const nick=nickEl.value.trim();if(!nick){nickEl.style.borderColor='#ff4444';return;}
     btn.textContent=lang==='kr'?'저장 중...':'Saving...';btn.disabled=true;
     if(window.saveScore)await window.saveScore(nick,finalScore);
-    let earned=0;
-    if(window.addPoints)earned=await window.addPoints(nick,finalScore);
+    try{localStorage.setItem('cathunt_nick',nick);}catch(e){}
     btn.textContent=lang==='kr'?'등록 완료 ✓':'Saved ✓';btn.style.background='#44aa66';
-    const pointsEl=document.getElementById('points-earned');
-    if(pointsEl)pointsEl.innerHTML=(lang==='kr'
-      ? `+${earned.toLocaleString('ko-KR')}P 적립! <a href="/land.html?nick=${encodeURIComponent(nick)}" style="color:#fac775">땅 사러가기 →</a>`
-      : `+${earned.toLocaleString('en-US')}P earned! <a href="/land.html?nick=${encodeURIComponent(nick)}" style="color:#fac775">Buy land →</a>`);
-    const chEl=document.getElementById('challenge-result');
-    if(challengeCode && chEl){
-      if(finalScore > challengeTarget){
-        if(window.claimLand)await window.claimLand(challengeCode, nick, challengeColor, finalScore);
-        if(window.notifyLoss)await window.notifyLoss(challengePrevOwner, challengeName, nick);
-        chEl.style.color='#7fff9f';
-        const discNote = challengeDiscounted ? ' (신규 할인 적용됨)' : '';
-        chEl.innerHTML=`⚔ 도전 성공${discNote}! ${escapeAttr(challengeName)}을(를) 뺏었어요. <a href="/land.html?nick=${encodeURIComponent(nick)}" style="color:#fac775">지도에서 확인 →</a>`;
-      } else {
-        if(window.spendPoints)await window.spendPoints(nick, 1000);
-        chEl.style.color='#ff8877';
-        chEl.textContent=`⚔ 도전 실패... 목표점수(${challengeTarget.toLocaleString('ko-KR')})를 못 넘었어요. -1,000P`;
-      }
-      if(challengeDiscounted && window.incrementChallengesUsed) await window.incrementChallengesUsed(nick);
-    }
     if(window.getTopScores)window.getTopScores().then(renderRanking);
   };
 }
